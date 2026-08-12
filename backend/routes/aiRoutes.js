@@ -14,9 +14,9 @@ const { protect, authorize } = require('../middleware/authMiddleware');
 router.post('/content-studio/:productId', protect, authorize('seller', 'admin'), generateContentStudio);
 router.post('/video-studio/:productId', protect, authorize('seller', 'admin'), generateVideoScript);
 router.post('/video-voice', protect, authorize('seller', 'admin'), generateVideoVoice);
-router.post('/generate-promo-video/:productId', protect, authorize('seller', 'admin'), generatePromoVideo);
+router.post('/generate-video/:productId', protect, authorize('seller', 'admin'), generatePromoVideo); // ← yeh line honi chahiye
 router.get('/recommendations', protect, getRecommendations);
-router.get('/review-summary/:productId', getReviewSummary); // public
+router.get('/review-summary/:productId', getReviewSummary);
 router.get('/sales-insights', protect, authorize('seller', 'admin'), getSalesInsights);
 
 module.exports = router;

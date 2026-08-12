@@ -192,20 +192,81 @@ const getReviewSummary = asyncHandler(async (req, res) => {
  * @route   GET /api/ai/sales-insights
  */
 const getSalesInsights = asyncHandler(async (req, res) => {
-  res.json({
-    summary:
-      'Sales demand is showing strong interest in products with AI-powered marketing content.',
-    topPerformers: [
-      'AURA Studio Pro Noise-Cancelling Headphones',
-      'AURA Cyber Vision AR Glasses',
-    ],
-    recommendations: [
-      'Enable AI Content Studio to optimize product titles and SEO tags',
-      'Generate promotional videos for top-selling products',
-      'Offer bundle pricing for complementary products',
-    ],
-    trend: 'Strong Growth',
-  });
+  try {
+    const Order = require('../models/Order');
+
+    const sellerId = req.user.id;
+
+    const products = await Product.find({ seller: sellerId });
+
+    const orders = await Order.find({ 'orderItems.seller': sellerId });
+
+    const productStats = {};
+    products.forEach((p) => {
+      productStats[p._id.toString()] = { name: p.name, unitsSold: 0, revenue: 0 };
+    });
+
+    orders.forEach((order) => {
+      order.orderItems.forEach((item) => {
+        if (item.seller.toString() === sellerId) {
+          const key = item.product.toString();
+          if (productStats[key]) {
+            productStats[key].unitsSold += item.quantity;
+            productStats[key].revenue += item.quantity * item.price;
+          }
+        }
+      });
+    });
+
+    const sortedProducts = Object.values(productStats).sort((a, b) => b.unitsSold - a.unitsSold);
+    const topPerformers = sortedProducts.slice(0, 3).map((p) => p.name);
+    const lowStockCount = products.filter((p) => p.stock <= 5).length;
+    const totalRevenue = sortedProducts.reduce((sum, p) => sum + p.revenue, 0);
+    const totalUnits = sortedProducts.reduce((sum, p) => sum + p.unitsSold, 0);
+
+    if (products.length === 0) {
+      return res.json({
+        summary: 'You have no products listed yet. Add products to start seeing sales insights.',
+        topPerformers: [],
+        recommendations: ['Add your first product to get started.'],
+        trend: 'No data yet',
+      });
+    }
+
+    try {
+      const systemPrompt = `You are an e-commerce sales analyst. Based on the seller's real data given, return JSON only: { "summary": "...", "recommendations": ["...", "...", "..."] }`;
+      const userPrompt = `Seller has ${products.length} products. Total units sold: ${totalUnits}. Total revenue: ₹${totalRevenue.toFixed(2)}. Top performing products: ${topPerformers.join(', ') || 'none yet'}. Products with low stock (≤5 units): ${lowStockCount}.`;
+
+      const aiResult = await askAI(systemPrompt, userPrompt, { json: true });
+
+      return res.json({
+        summary: aiResult.summary,
+        topPerformers,
+        recommendations: aiResult.recommendations,
+        trend: totalUnits > 0 ? 'Active sales' : 'No sales yet',
+        totalRevenue,
+        totalUnits,
+        lowStockCount,
+      });
+    } catch (groqErr) {
+      return res.json({
+        summary: `You've sold ${totalUnits} units across ${products.length} products, generating ₹${totalRevenue.toFixed(2)} in revenue.`,
+        topPerformers,
+        recommendations: [
+          lowStockCount > 0 ? `${lowStockCount} product(s) are running low on stock — consider restocking.` : 'Stock levels look healthy.',
+          'Use AI Content Studio to improve product descriptions for better conversion.',
+          totalUnits === 0 ? 'Generate a promo video to attract your first customers.' : 'Keep engaging customers with fresh promotional content.',
+        ],
+        trend: totalUnits > 0 ? 'Active sales' : 'No sales yet',
+        totalRevenue,
+        totalUnits,
+        lowStockCount,
+      });
+    }
+  } catch (err) {
+    console.error('Sales insights error:', err);
+    res.status(500).json({ message: 'Could not generate sales insights' });
+  }
 });
 
 /**

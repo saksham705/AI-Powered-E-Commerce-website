@@ -28,11 +28,17 @@ const SellerDashboard = () => {
   const [insights, setInsights] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
 
+  // AI Content Studio States
   const [aiPanel, setAiPanel] = useState(null);
   const [aiLoadingId, setAiLoadingId] = useState(null);
 
+  // Promo Video States
   const [videoPanel, setVideoPanel] = useState(null);
   const [videoLoadingId, setVideoLoadingId] = useState(null);
+
+  // Reviews States
+  const [productReviews, setProductReviews] = useState({});
+  const [expandedProductId, setExpandedProductId] = useState(null);
 
   const loadAll = () => {
     api
@@ -97,10 +103,7 @@ const SellerDashboard = () => {
         formData.append('images', file);
       });
 
-      const res = await api.post(
-        '/products/upload-images',
-        formData
-      );
+      const res = await api.post('/products/upload-images', formData);
 
       const uploadedFiles = res.data.files || [];
 
@@ -120,18 +123,13 @@ const SellerDashboard = () => {
 
       setForm((prev) => ({
         ...prev,
-        images: [
-          ...(prev.images || []),
-          ...uploadedUrls,
-        ],
+        images: [...(prev.images || []), ...uploadedUrls],
       }));
     } catch (err) {
       console.error('Image upload error:', err);
 
       setError(
-        err.response?.data?.message ||
-          err.message ||
-          'Image upload failed.'
+        err.response?.data?.message || err.message || 'Image upload failed.'
       );
     } finally {
       setUploading(false);
@@ -142,9 +140,7 @@ const SellerDashboard = () => {
   const removeImage = (url) => {
     setForm((prev) => ({
       ...prev,
-      images: (prev.images || []).filter(
-        (img) => img !== url
-      ),
+      images: (prev.images || []).filter((img) => img !== url),
     }));
   };
 
@@ -172,10 +168,7 @@ const SellerDashboard = () => {
 
     try {
       if (editingId) {
-        await api.put(
-          `/products/${editingId}`,
-          payload
-        );
+        await api.put(`/products/${editingId}`, payload);
       } else {
         await api.post('/products', payload);
       }
@@ -185,8 +178,7 @@ const SellerDashboard = () => {
       setTab('products');
     } catch (err) {
       setError(
-        err.response?.data?.message ||
-          'Could not save product.'
+        err.response?.data?.message || 'Could not save product.'
       );
     }
   };
@@ -200,9 +192,7 @@ const SellerDashboard = () => {
       category: p.category?._id || '',
       stock: p.stock || '',
       brand: p.brand || '',
-      images: Array.isArray(p.images)
-        ? p.images
-        : [],
+      images: Array.isArray(p.images) ? p.images : [],
     });
 
     setEditingId(p._id);
@@ -220,35 +210,28 @@ const SellerDashboard = () => {
       loadAll();
     } catch (err) {
       setError(
-        err.response?.data?.message ||
-          'Could not delete product.'
+        err.response?.data?.message || 'Could not delete product.'
       );
     }
   };
 
   const updateOrderStatus = async (orderId, status) => {
     try {
-      await api.put(
-        `/orders/${orderId}/status`,
-        { status }
-      );
-
+      await api.put(`/orders/${orderId}/status`, { status });
       loadAll();
     } catch (err) {
       setError(
-        err.response?.data?.message ||
-          'Could not update order status.'
+        err.response?.data?.message || 'Could not update order status.'
       );
     }
   };
 
+  // AI Content Studio Handler
   const runContentStudio = async (productId) => {
     setAiLoadingId(productId);
 
     try {
-      const res = await api.post(
-        `/ai/content-studio/${productId}`
-      );
+      const res = await api.post(`/ai/content-studio/${productId}`);
 
       setAiPanel({
         productId,
@@ -256,71 +239,57 @@ const SellerDashboard = () => {
       });
     } catch (err) {
       alert(
-        err.response?.data?.message ||
-          'AI Content Studio failed.'
+        err.response?.data?.message || 'AI Content Studio failed.'
       );
     } finally {
       setAiLoadingId(null);
     }
   };
 
+  // Promo Video Generator Handler
   const generatePromoVideo = async (product) => {
     setVideoLoadingId(product._id);
-    setError('');
-    setVideoPanel(null);
 
     try {
-      if (
-        !Array.isArray(product.images) ||
-        product.images.length === 0
-      ) {
-        throw new Error(
-          'Product needs at least one image to generate a video.'
-        );
-      }
-
-      const res = await api.post(
-        `/ai/generate-promo-video/${product._id}`
-      );
-
-      const videoUrl =
-        res.data.videoUrl || res.data.url;
-
-      if (!videoUrl) {
-        throw new Error(
-          'Video URL was not returned by the server.'
-        );
-      }
+      const res = await api.post(`/ai/generate-video/${product._id}`);
 
       setVideoPanel({
         productId: product._id,
-        videoUrl,
+        videoUrl: res.data.videoUrl,
       });
 
       loadAll();
-
-      alert(
-        `Video generated and saved! Duration: ${
-          res.data.videoDuration || 'N/A'
-        }`
-      );
     } catch (err) {
-      setError(
-        err.response?.data?.message ||
-          err.message ||
-          'Promo video generation failed.'
+      alert(
+        err.response?.data?.message || 'Promo video generation failed.'
       );
     } finally {
       setVideoLoadingId(null);
     }
   };
 
+  // Reviews Toggle Handler
+  const toggleReviews = async (productId) => {
+    if (expandedProductId === productId) {
+      setExpandedProductId(null);
+      return;
+    }
+    setExpandedProductId(productId);
+
+    if (!productReviews[productId]) {
+      try {
+        const res = await api.get(`/reviews/product/${productId}`);
+        setProductReviews((prev) => ({ ...prev, [productId]: res.data }));
+      } catch (err) {
+        setProductReviews((prev) => ({ ...prev, [productId]: [] }));
+      }
+    }
+  };
+
   const applyAiSuggestion = () => {
     if (!aiPanel) return;
 
-    const p = products.find(
-      (x) => x._id === aiPanel.productId
-    );
+    const p = products.find((x) => x._id === aiPanel.productId);
 
     if (!p) return;
 
@@ -328,12 +297,8 @@ const SellerDashboard = () => {
 
     setForm((prev) => ({
       ...prev,
-      name:
-        aiPanel.data.title ||
-        prev.name,
-      description:
-        aiPanel.data.description ||
-        prev.description,
+      name: aiPanel.data.title || prev.name,
+      description: aiPanel.data.description || prev.description,
     }));
 
     setAiPanel(null);
@@ -410,106 +375,90 @@ const SellerDashboard = () => {
       {tab === 'products' && (
         <div className="admin-table">
           {products.map((p) => (
-            <div className="admin-row" key={p._id}>
-              <img
-                src={p.images?.[0]}
-                alt={p.name}
-              />
+            <div key={p._id}>
+              <div className="admin-row">
+                <img src={p.images?.[0]} alt={p.name} />
+                <span className="flex-grow">{p.name}</span>
+                <span>₹{p.price}</span>
+                <span>Stock: {p.stock}</span>
 
-              <span className="flex-grow">
-                {p.name}
-              </span>
+                <button
+                  onClick={() => runContentStudio(p._id)}
+                  disabled={aiLoadingId === p._id}
+                >
+                  {aiLoadingId === p._id ? 'Generating...' : 'AI Content Studio'}
+                </button>
 
-              <span>₹{p.price}</span>
+                <button
+                  onClick={() => generatePromoVideo(p)}
+                  disabled={videoLoadingId === p._id}
+                >
+                  {videoLoadingId === p._id
+                    ? 'Generating Video...'
+                    : 'Generate Promo Video'}
+                </button>
 
-              <span>
-                Stock: {p.stock}
-              </span>
+                <button onClick={() => toggleReviews(p._id)}>
+                  {expandedProductId === p._id ? 'Hide Reviews' : 'Reviews'}
+                </button>
 
-              <button
-                onClick={() =>
-                  runContentStudio(p._id)
-                }
-                disabled={
-                  aiLoadingId === p._id
-                }
-              >
-                {aiLoadingId === p._id
-                  ? 'Generating...'
-                  : 'AI Content Studio'}
-              </button>
+                <button onClick={() => handleEdit(p)}>Edit</button>
 
-              <button
-                onClick={() =>
-                  generatePromoVideo(p)
-                }
-                disabled={
-                  videoLoadingId === p._id
-                }
-              >
-                {videoLoadingId === p._id
-                  ? 'Generating Video...'
-                  : 'Generate Promo Video'}
-              </button>
+                <button className="danger" onClick={() => handleDelete(p._id)}>
+                  Delete
+                </button>
+              </div>
 
-              <button
-                onClick={() => handleEdit(p)}
-              >
-                Edit
-              </button>
-
-              <button
-                className="danger"
-                onClick={() =>
-                  handleDelete(p._id)
-                }
-              >
-                Delete
-              </button>
+              {expandedProductId === p._id && (
+                <div className="seller-reviews-panel">
+                  {!productReviews[p._id] ? (
+                    <p className="status-text">Loading reviews...</p>
+                  ) : productReviews[p._id].length === 0 ? (
+                    <p className="status-text">
+                      No reviews yet for this product.
+                    </p>
+                  ) : (
+                    productReviews[p._id].map((r) => (
+                      <div className="review-item" key={r._id}>
+                        <div className="review-header">
+                          <strong>{r.user?.name || 'Anonymous'}</strong>
+                          <span className="review-stars">
+                            {'★'.repeat(r.rating)}
+                            {'☆'.repeat(5 - r.rating)}
+                          </span>
+                        </div>
+                        <p>{r.comment}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
             </div>
           ))}
 
           {aiPanel && (
             <div className="ai-panel">
               <h4>AI Suggestion</h4>
-
               <p>
-                <strong>Title:</strong>{' '}
-                {aiPanel.data.title}
+                <strong>Title:</strong> {aiPanel.data.title}
               </p>
-
               <p>
-                <strong>Description:</strong>{' '}
-                {aiPanel.data.description}
+                <strong>Description:</strong> {aiPanel.data.description}
               </p>
-
               <p>
-                <strong>Tags:</strong>{' '}
-                {(aiPanel.data.tags || []).join(', ')}
+                <strong>Tags:</strong> {(aiPanel.data.tags || []).join(', ')}
               </p>
-
               <p>
-                <strong>Target Audience:</strong>{' '}
-                {aiPanel.data.targetAudience}
+                <strong>Target Audience:</strong> {aiPanel.data.targetAudience}
               </p>
-
               <p>
-                <strong>Pricing Advice:</strong>{' '}
-                {aiPanel.data.pricingAdvice}
+                <strong>Pricing Advice:</strong> {aiPanel.data.pricingAdvice}
               </p>
-
               <div className="ai-panel-actions">
-                <button
-                  onClick={applyAiSuggestion}
-                >
+                <button onClick={applyAiSuggestion}>
                   Use This — Edit Product
                 </button>
-
-                <button
-                  onClick={() => setAiPanel(null)}
-                >
-                  Dismiss
-                </button>
+                <button onClick={() => setAiPanel(null)}>Dismiss</button>
               </div>
             </div>
           )}
@@ -517,7 +466,6 @@ const SellerDashboard = () => {
           {videoPanel && (
             <div className="ai-panel">
               <h4>Promo Video</h4>
-
               <video
                 src={videoPanel.videoUrl}
                 controls
@@ -529,7 +477,6 @@ const SellerDashboard = () => {
                   display: 'block',
                 }}
               />
-
               <div className="ai-panel-actions">
                 <a
                   href={videoPanel.videoUrl}
@@ -538,14 +485,7 @@ const SellerDashboard = () => {
                 >
                   Open Video
                 </a>
-
-                <button
-                  onClick={() =>
-                    setVideoPanel(null)
-                  }
-                >
-                  Dismiss
-                </button>
+                <button onClick={() => setVideoPanel(null)}>Dismiss</button>
               </div>
             </div>
           )}
@@ -553,13 +493,9 @@ const SellerDashboard = () => {
       )}
 
       {tab === 'add' && (
-        <form
-          onSubmit={handleSubmit}
-          className="simple-form"
-        >
+        <form onSubmit={handleSubmit} className="simple-form">
           <label>
             Name
-
             <input
               value={form.name}
               onChange={(e) =>
@@ -574,7 +510,6 @@ const SellerDashboard = () => {
 
           <label>
             Description
-
             <textarea
               value={form.description}
               onChange={(e) =>
@@ -590,7 +525,6 @@ const SellerDashboard = () => {
 
           <label>
             Price (₹)
-
             <input
               type="number"
               value={form.price}
@@ -606,7 +540,6 @@ const SellerDashboard = () => {
 
           <label>
             Discount Price (₹, optional)
-
             <input
               type="number"
               value={form.discountPrice}
@@ -621,7 +554,6 @@ const SellerDashboard = () => {
 
           <label>
             Category
-
             <select
               value={form.category}
               onChange={(e) =>
@@ -632,15 +564,9 @@ const SellerDashboard = () => {
               }
               required
             >
-              <option value="">
-                Select category
-              </option>
-
+              <option value="">Select category</option>
               {categories.map((c) => (
-                <option
-                  key={c._id}
-                  value={c._id}
-                >
+                <option key={c._id} value={c._id}>
                   {c.name}
                 </option>
               ))}
@@ -649,7 +575,6 @@ const SellerDashboard = () => {
 
           <label>
             Stock
-
             <input
               type="number"
               value={form.stock}
@@ -665,7 +590,6 @@ const SellerDashboard = () => {
 
           <label>
             Brand
-
             <input
               value={form.brand}
               onChange={(e) =>
@@ -679,7 +603,6 @@ const SellerDashboard = () => {
 
           <label>
             Product Images
-
             <input
               type="file"
               accept="image/*"
@@ -688,45 +611,23 @@ const SellerDashboard = () => {
             />
           </label>
 
-          {form.images &&
-            form.images.length > 0 && (
-              <div className="image-preview-row">
-                {form.images.map((url) => (
-                  <div
-                    className="image-preview"
-                    key={url}
-                  >
-                    <img
-                      src={url}
-                      alt="Product preview"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        removeImage(url)
-                      }
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-          {error && (
-            <p className="status-text error">
-              {error}
-            </p>
+          {form.images && form.images.length > 0 && (
+            <div className="image-preview-row">
+              {form.images.map((url) => (
+                <div className="image-preview" key={url}>
+                  <img src={url} alt="Product preview" />
+                  <button type="button" onClick={() => removeImage(url)}>
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
 
-          <button
-            type="submit"
-            disabled={uploading}
-          >
-            {editingId
-              ? 'Update Product'
-              : 'Create Product'}
+          {error && <p className="status-text error">{error}</p>}
+
+          <button type="submit" disabled={uploading}>
+            {editingId ? 'Update Product' : 'Create Product'}
           </button>
         </form>
       )}
@@ -734,46 +635,22 @@ const SellerDashboard = () => {
       {tab === 'orders' && (
         <div className="admin-table">
           {orders.map((o) => (
-            <div
-              className="admin-row"
-              key={o._id}
-            >
+            <div className="admin-row" key={o._id}>
               <span className="flex-grow">
                 Order #{o._id.slice(-8)}
               </span>
 
-              <span>
-                ₹{o.totalPrice}
-              </span>
+              <span>₹{o.totalPrice}</span>
 
               <select
                 value={o.status}
-                onChange={(e) =>
-                  updateOrderStatus(
-                    o._id,
-                    e.target.value
-                  )
-                }
+                onChange={(e) => updateOrderStatus(o._id, e.target.value)}
               >
-                <option value="pending">
-                  Pending
-                </option>
-
-                <option value="processing">
-                  Processing
-                </option>
-
-                <option value="shipped">
-                  Shipped
-                </option>
-
-                <option value="delivered">
-                  Delivered
-                </option>
-
-                <option value="cancelled">
-                  Cancelled
-                </option>
+                <option value="pending">Pending</option>
+                <option value="processing">Processing</option>
+                <option value="shipped">Shipped</option>
+                <option value="delivered">Delivered</option>
+                <option value="cancelled">Cancelled</option>
               </select>
             </div>
           ))}
@@ -783,46 +660,35 @@ const SellerDashboard = () => {
       {tab === 'insights' && (
         <div className="insights-box">
           {insightsLoading ? (
-            <p className="status-text">
-              Loading insights...
-            </p>
+            <p className="status-text">Loading insights...</p>
           ) : insights ? (
             <>
-              <p className="ai-badge">
-                AI Insights
-              </p>
+              <p className="ai-badge">AI Insights</p>
 
               <p>{insights.summary}</p>
 
               <p>
-                <strong>Trend:</strong>{' '}
-                {insights.trend}
+                <strong>Trend:</strong> {insights.trend}
               </p>
 
               <h4>Top Performers</h4>
 
               <ul>
-                {(insights.topPerformers || []).map(
-                  (t, i) => (
-                    <li key={i}>{t}</li>
-                  )
-                )}
+                {(insights.topPerformers || []).map((t, i) => (
+                  <li key={i}>{t}</li>
+                ))}
               </ul>
 
               <h4>Recommendations</h4>
 
               <ul>
-                {(insights.recommendations || []).map(
-                  (r, i) => (
-                    <li key={i}>{r}</li>
-                  )
-                )}
+                {(insights.recommendations || []).map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
               </ul>
             </>
           ) : (
-            <p className="status-text">
-              No insights available.
-            </p>
+            <p className="status-text">No insights available.</p>
           )}
         </div>
       )}
