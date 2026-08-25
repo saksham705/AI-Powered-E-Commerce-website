@@ -2,6 +2,8 @@ const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
 const ffmpeg = require('fluent-ffmpeg');
+const ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
+ffmpeg.setFfmpegPath(ffmpegPath);
 const asyncHandler = require('express-async-handler');
 
 const Product = require('../models/Product');
