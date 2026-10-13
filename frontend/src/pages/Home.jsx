@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useAuth } from '@clerk/clerk-react';
 import api from '../api/axios.js';
 import ProductCard from '../components/ProductCard.jsx';
 
@@ -10,10 +9,6 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pageInfo, setPageInfo] = useState({ page: 1, totalPages: 1, total: 0 });
-
-  const [recommendations, setRecommendations] = useState([]);
-  const [recLoading, setRecLoading] = useState(false);
-  const { isSignedIn } = useAuth();
 
   const keyword = searchParams.get('keyword') || '';
   const category = searchParams.get('category') || '';
@@ -49,16 +44,6 @@ const Home = () => {
       .finally(() => setLoading(false));
   }, [keyword, category, page, minPrice, maxPrice]);
 
-  useEffect(() => {
-    if (!isSignedIn || keyword || category) return;
-    setRecLoading(true);
-    api
-      .get('/ai/recommendations')
-      .then((res) => setRecommendations(res.data || []))
-      .catch(() => setRecommendations([]))
-      .finally(() => setRecLoading(false));
-  }, [isSignedIn, keyword, category]);
-
   const goToPage = (newPage) => {
     const next = new URLSearchParams(searchParams);
     next.set('page', newPage);
@@ -89,22 +74,6 @@ const Home = () => {
 
   return (
     <>
-      {isSignedIn && !keyword && !category && (
-        <section className="recommendations-section">
-          <h2>Recommended for you</h2>
-          {recLoading ? (
-            <p className="status-text">Loading recommendations...</p>
-          ) : recommendations.length === 0 ? (
-            <p className="status-text">No recommendations yet.</p>
-          ) : (
-            <div className="product-grid">
-              {recommendations.map((product) => (
-                <ProductCard key={product._id} product={product} />
-              ))}
-            </div>
-          )}
-        </section>
-      )}
 
       <div className="price-filter-row">
         <form onSubmit={applyPriceFilter} className="price-filter-form">
